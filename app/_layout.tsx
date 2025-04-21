@@ -1,39 +1,95 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+import '~/global.css';
+import { Theme, ThemeProvider } from '@react-navigation/native';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import * as React from 'react';
+import { Platform, ActivityIndicator } from 'react-native';
+import { NAV_THEME } from '~/lib/constants';
+import { useColorScheme } from '~/lib/useColorScheme';
+import { PortalHost } from '@rn-primitives/portal';
+import { setAndroidNavigationBar } from '~/lib/android-navigation-bar';
+import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
+import { tokenCache } from '~/cache';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+
+export { ErrorBoundary } from 'expo-router';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  const EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_YWN0aXZlLWxhZHlidWctMTAuY2xlcmsuYWNjb3VudHMuZGV2JA";
 
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
+  if (!EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    throw new Error('Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env');
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <ClerkProvider tokenCache={tokenCache} publishableKey={EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+      <ClerkLoaded>
+        <RootNavigation />
+      </ClerkLoaded>
+    </ClerkProvider>
   );
 }
+
+function RootNavigation() {
+  const hasMounted = React.useRef(false);
+  const router = useRouter();
+  const { colorScheme, isDarkColorScheme } = useColorScheme();
+  const [isColorSchemeLoaded, setIsColorSchemeLoaded] = React.useState(false);
+  const { isSignedIn, isLoaded } = useAuth();
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    console.log('Auth State - isLoaded:', isLoaded, 'isSignedIn:', isSignedIn);
+    if (isLoaded && isMounted) {
+      if (isSignedIn) {
+        console.log('Navigating to (tabs)');
+        router.replace('/(tabs)');
+      } else {
+        console.log('Navigating to (auth)/login');
+        router.replace('/(auth)/login');
+      }
+    }
+  }, [isLoaded, isSignedIn, isMounted, router]);
+
+  useIsomorphicLayoutEffect(() => {
+    if (hasMounted.current) {
+      return;
+    }
+    if (Platform.OS === 'web') {
+      document.documentElement.classList.add('bg-background');
+    }
+    setAndroidNavigationBar(colorScheme);
+    setIsColorSchemeLoaded(true);
+    hasMounted.current = true;
+  }, []);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // if (!isColorSchemeLoaded || !isLoaded) {
+  //   return (
+  //     <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
+  //       <ActivityIndicator size="large" color="#2D796C" style={{ flex: 1 }} />
+  //     </ThemeProvider>
+  //   );
+  // }
+
+  console.log('Rendering navigation - isSignedIn:', isSignedIn);
+
+  return (
+   
+      <><StatusBar style={isDarkColorScheme ? 'light' : 'dark'} /><Stack screenOptions={{ headerShown: false }}>
+      {isSignedIn ? (
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      ) : (
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      )}
+    </Stack><PortalHost /></>
+    
+  );
+}
+
+const useIsomorphicLayoutEffect =
+  Platform.OS === 'web' && typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
