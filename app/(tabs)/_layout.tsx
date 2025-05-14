@@ -2,7 +2,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { Tabs } from 'expo-router';
-import { ThemeToggle } from '~/src/components/ThemeToggle';
+
 
 export default function TabLayout() {
     return (
@@ -12,7 +12,7 @@ export default function TabLayout() {
                 options={{
                     title: 'Home',
                     tabBarIcon: ({ color }: { color: string }) => <FontAwesome size={28} name="home" color={color} />,
-                    headerRight: () => <ThemeToggle />,
+                  
                 }}
             />
             <Tabs.Screen
@@ -28,7 +28,15 @@ export default function TabLayout() {
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color }: { color: string }) => <FontAwesome size={28} name="user" color={color} />,
-                    headerRight: () => <ThemeToggle />,
+                 
+                }}
+            />
+            <Tabs.Screen
+                name="appointments"
+                options={{
+                    title: 'Appointments',
+                    tabBarIcon: ({ color }: { color: string }) => <FontAwesome size={28} name="book" color={color} />,
+                  
                 }}
             />
             <Tabs.Screen
@@ -36,7 +44,7 @@ export default function TabLayout() {
                 options={{
                     title: 'Settings',
                     tabBarIcon: ({ color }: { color: string }) => <FontAwesome size={28} name="cog" color={color} />,
-                    headerRight: () => <ThemeToggle />,
+                 
                 }}
             />
           

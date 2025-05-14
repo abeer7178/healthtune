@@ -1,7 +1,7 @@
 import { useSignIn, useSignUp, useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { useSessionStore } from '~/src/store/store';
+import { useSessionStore } from '../../src/store/store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchUser } from '../api/api';
 
@@ -16,12 +16,10 @@ export function useAuth() {
   const [token, setToken] = useState<string | null>(null);
   const { fetchAllSessions } = useSessionStore();
 
-  // Log isSignedIn changes for debugging
   useEffect(() => {
     console.log('isSignedIn changed:', isSignedIn);
   }, [isSignedIn]);
 
-  // Token refresh effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
@@ -41,8 +39,8 @@ export function useAuth() {
     };
 
     if (isSignedIn) {
-      refreshToken(); // Initial token fetch
-      interval = setInterval(refreshToken, 5 * 60 * 1000); // Refresh every 5 minutes
+      refreshToken();
+      interval = setInterval(refreshToken, 5 * 60 * 1000);
     }
 
     return () => {
@@ -73,11 +71,12 @@ export function useAuth() {
       if (userToken) {
         await fetchUser();
         await fetchAllSessions(userToken);
-        router.push('/(tabs)'); // Explicitly navigate after login
       }
+
+      return { success: true };
     } catch (error: any) {
-      console.log('Attempting login with:', email, password);
       console.error('Login Error:', error?.message || error);
+      return { success: false, error: error?.errors?.[0]?.message || error?.message || 'Invalid email or password' };
     } finally {
       setLoading(false);
     }
@@ -90,9 +89,10 @@ export function useAuth() {
 
       await signUp.create({ emailAddress: email, password });
       await signUp.prepareEmailAddressVerification();
-      router.push('/(auth)/verification');
+      return { success: true };
     } catch (error: any) {
       console.error('Signup Error:', error?.message || error);
+      return { success: false, error: error?.errors?.[0]?.message || error?.message || 'Signup failed' };
     } finally {
       setLoading(false);
     }
@@ -118,10 +118,12 @@ export function useAuth() {
       if (userToken) {
         await fetchUser();
         await fetchAllSessions(userToken);
-        router.push('/(tabs)');
       }
+
+      return { success: true };
     } catch (error: any) {
       console.error('Google Login Error:', error?.message || error);
+      return { success: false, error: error?.errors?.[0]?.message || error?.message || 'Google login failed' };
     } finally {
       setLoading(false);
     }
@@ -144,13 +146,10 @@ export function useAuth() {
       setToken(userToken ?? null);
       console.log('Google Signup Token:', userToken);
 
-      if (userToken) {
-        router.push('/(tabs)');
-      } else {
-        router.push('/(auth)/verification');
-      }
+      return { success: true };
     } catch (error: any) {
       console.error('Google Signup Error:', error?.message || error);
+      return { success: false, error: error?.errors?.[0]?.message || error?.message || 'Google signup failed' };
     } finally {
       setLoading(false);
     }
@@ -164,9 +163,10 @@ export function useAuth() {
       await AsyncStorage.clear();
       await AsyncStorage.removeItem('userToken');
       console.log('Logged out successfully');
-      router.push('/(auth)/login');
+      return { success: true };
     } catch (error: any) {
       console.error('Logout Error:', error?.message || error);
+      return { success: false, error: error?.message || 'Logout failed' };
     } finally {
       setLoading(false);
     }

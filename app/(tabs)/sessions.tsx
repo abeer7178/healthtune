@@ -2,45 +2,84 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSessionStore } from '~/src/store/store';
-import { useAuth } from '~/src/hooks/useAuth';
+import { useSessionStore } from '../../src/store/store';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
+import { fetchPatients } from '../../src/api/api';
+import MarkdownIt from 'markdown-it';
+import WebView from 'react-native-webview';
+import Toast from 'react-native-toast-message';
+import HeartbeatAnimation from 'src/components/ui/LoaderAnimation';
 
 interface Session {
+  [x: string]: any;
   id: string;
   patientName: string;
   date: string;
-  duration: string;
+  duration: string | null;
   sessionType?: string;
   sex?: string;
   status?: string;
   summary?: any;
-  note?: { content: { note: string } } | string;
+  note?: { content: { note: string } };
+  doctorNotes?: { content: { note: string } };
 }
+
+const md = new MarkdownIt();
 
 const SessionsScreen = () => {
   const { token } = useAuth();
-  const { sessions, loading, error, fetchAllSessions } = useSessionStore();
+  const { sessions, patients, loading, error, fetchAllSessions, fetchPatients } = useSessionStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const navigation = useNavigation();
+
   // Fetch sessions when component mounts or token changes
   const onRefresh = useCallback(async () => {
     if (token) {
       setRefreshing(true);
       try {
-        await fetchAllSessions(token);
+        await Promise.all([fetchAllSessions(token), fetchPatients()]);
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Sessions refreshed successfully',
+        });
+      } catch (err) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to refresh sessions',
+        });
+        console.error('Refresh error:', err);
       } finally {
         setRefreshing(false);
       }
     }
-  }, [token, fetchAllSessions]);
+  }, [token, fetchAllSessions, fetchPatients]);
 
-  // Existing useEffect remains unchanged
   useEffect(() => {
     if (token) {
-      fetchAllSessions(token);
+      (async () => {
+        try {
+          await Promise.all([fetchAllSessions(token), fetchPatients()]);
+        } catch (err) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to fetch sessions or patients',
+          });
+          console.error('Fetch error:', err);
+        } finally {
+          // Mark initial load as complete, regardless of success or failure
+          setInitialLoadComplete(true);
+        }
+      })();
     }
-  }, [token, fetchAllSessions]);
+  }, [token, fetchAllSessions, fetchPatients]);
 
   const getStatusColor = (status?: string) => {
     switch (status) {
@@ -59,67 +98,114 @@ const SessionsScreen = () => {
     return status ? status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ') : 'Unknown';
   };
 
-  const filtered: any = sessions.filter(session => {
-    const matchesSearch = 
-      (session.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-      (session.date?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-      (session.duration?.includes(searchQuery) || false) ||
-      (typeof session.summary === 'string' && session.summary.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      false;
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const formatDuration = (duration: string | null) => {
+    if (!duration) return 'N/A';
+    const minutes = Math.floor(parseInt(duration) / 60);
+    const seconds = parseInt(duration) % 60;
+    return `${minutes}m ${seconds}s`;
+  };
+
+  const filtered: Session[] = sessions.filter((session) => {
+    const patient = patients.find((p) => p.id === Number(session.patientId));
+    const mreNumber = patient ? patient.mreNumber : '';
+
+    const matchesSearch =
+      session.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      mreNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      session.date?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      session.duration?.toString().includes(searchQuery) ||
+      (typeof session.summary === 'string' &&
+        session.summary.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesFilter = selectedFilter === 'all' || session.status === selectedFilter;
 
     return matchesSearch && matchesFilter;
   });
 
-  const renderSessionCard = (session: Session) => (
-    <TouchableOpacity
-      key={session.id.toString()}
-      style={styles.card}
-      onPress={() => console.log('Session pressed:', session.id)}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.patientInfo}>
-          <Text style={styles.patientName}>{session.patientName || 'Unknown Patient'}</Text>
-          <View style={styles.statusContainer}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: getStatusColor(session.status) }
-              ]}
+  const renderSessionCard = (session: Session) => {
+    const aiNote = session.note?.content?.note || 'No AI-generated note available';
+    const doctorNote = session.doctorNotes?.content?.note || 'No doctor note available';
+    const patient = patients.find((p) => p.id === Number(session.patientId));
+    const mreNumber = patient ? patient.mreNumber : 'N/A';
+    const htmlContent = `
+      <html>
+        <head>
+          <style>
+            body {
+              font-size: 14px;
+              color: #333;
+              line-height: 20px;
+              margin: 0;
+              padding: 0;
+            }
+          </style>
+        </head>
+        <body>
+          ${md.render(aiNote)}
+        </body>
+      </html>
+    `;
+
+    return (
+      <TouchableOpacity
+        key={session.id.toString()}
+        style={styles.card}
+        onPress={() =>
+          router.push({
+            pathname: '/SessionDetailsScreen',
+            params: { sessionId: session.id, aiNote, doctorNote },
+          })
+        }
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.patientInfo}>
+            <Text style={styles.patientName}>{session.patientName || 'Unknown Patient'}</Text>
+            <Text style={styles.mreNumber}>MRN: {mreNumber}</Text>
+            <View style={styles.statusContainer}>
+              <View
+                style={[styles.statusDot, { backgroundColor: getStatusColor(session.status) }]}
+              />
+              <Text style={styles.statusText}>{getStatusText(session.status)}</Text>
+            </View>
+          </View>
+          <View style={styles.sessionInfo}></View>
+        </View>
+
+        <View style={styles.noteContainer}>
+          <Text style={styles.noteLabel}>AI-View</Text>
+          <View style={{ height: 48 }}>
+            <WebView
+              originWhitelist={['*']}
+              source={{ html: htmlContent }}
+              style={{ flex: 1 }}
+              scrollEnabled={false}
             />
-            <Text style={styles.statusText}>
-              {getStatusText(session.status)}
-            </Text>
           </View>
         </View>
-        <View style={styles.sessionInfo}>
-          <View style={styles.timeInfo}>
-            <MaterialIcons name="access-time" size={14} color="#666" />
-      
-          </View>
-          <View style={styles.dateInfo}>
-            <MaterialIcons name="event" size={14} color="#666" />
-          
-          </View>
+
+        <View style={styles.noteContainer}>
+          <Text style={styles.noteLabel}>Doctor Note</Text>
+          <Text style={styles.noteText} numberOfLines={2}>
+            {doctorNote}
+          </Text>
         </View>
-      </View>
+      </TouchableOpacity>
+    );
+  };
 
-      <View style={styles.summaryContainer}>
-        <Text style={styles.summaryLabel}>AI Summary</Text>
-        <Text style={styles.summaryText} numberOfLines={3}>
-          {typeof session.summary === "string"
-            ? session.summary
-            : session.summary?.content?.summary 
-           
-            || "No summary available"}
-        </Text>
+  // Show the heartbeat animation only during initial load
+  if (!initialLoadComplete && loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <HeartbeatAnimation />
       </View>
-    </TouchableOpacity>
-  );
-
-  if (loading) return <ActivityIndicator size="large" color="#007AFF" style={styles.loading} />;
-  if (error) return <Text style={styles.error}>{error}</Text>;
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -130,7 +216,7 @@ const SessionsScreen = () => {
         <Text style={styles.headerTitle}>Session Records</Text>
         <Text style={styles.headerSubtitle}>AI-Powered Consultation Summaries</Text>
       </LinearGradient>
-  
+
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Feather name="search" size={20} color="#666" />
@@ -142,7 +228,7 @@ const SessionsScreen = () => {
           />
         </View>
       </View>
-  
+
       <View style={styles.filterContainer}>
         {['all', 'Completed', 'Process', 'in-review'].map((filter) => (
           <TouchableOpacity
@@ -162,18 +248,22 @@ const SessionsScreen = () => {
           </TouchableOpacity>
         ))}
       </View>
-  
-      <ScrollView 
+
+      <ScrollView
         style={styles.sessionList}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#2D796C']} // Matches your header color
+            colors={['#2D796C']}
           />
         }
       >
-        {filtered.map(renderSessionCard)}
+        {filtered.length > 0 ? (
+          filtered.map(renderSessionCard)
+        ) : (
+          <Text style={styles.noDataText}>No sessions found</Text>
+        )}
       </ScrollView>
     </View>
   );
@@ -182,11 +272,12 @@ const SessionsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7F9',
+    backgroundColor: 'white',
   },
   header: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 70,
+    paddingBottom: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -208,14 +299,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    padding: 10,
+    padding: 5,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    height: 60,
+    height: 50,
   },
   searchInput: {
     flex: 1,
@@ -226,6 +317,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     marginBottom: 8,
+  },
+  mreNumber: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   filterButton: {
     paddingHorizontal: 16,
@@ -299,6 +395,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'white',
+  },
   dateInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -308,19 +410,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
   },
-  summaryContainer: {
+  noteContainer: {
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     paddingTop: 12,
     marginTop: 8,
   },
-  summaryLabel: {
+  noteLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#666',
     marginBottom: 4,
   },
-  summaryText: {
+  noteText: {
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
@@ -332,6 +434,12 @@ const styles = StyleSheet.create({
   },
   error: {
     color: 'red',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#666',
     textAlign: 'center',
     marginTop: 20,
   },

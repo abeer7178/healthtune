@@ -2,33 +2,63 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import InputField from '~/src/components/ui/InputField';
-
-import { useAuth } from '~/src/hooks/useAuth';
+import InputField from '../../src/components/ui/InputField';
+import { useAuth } from '../../src/hooks/useAuth';
 import { router } from 'expo-router';
-
-
 import { Ionicons } from '@expo/vector-icons';
+import Toast from 'react-native-toast-message'; // Use react-native-toast-message
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 const handleSignInPress = () => {
-  router.push('/(auth)/login'); // Navigate to login page
+  router.push('/(auth)/login');
 };
 
 const SignupScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const { handleSignup, handleGoogleSignup } = useAuth();
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isPasswordVisibled, setIsPasswordVisibled] = useState(false);
+  const { handleSignup, handleGoogleSignup, loading } = useAuth();
 
- 
   const togglePasswordVisibility = () => {
-    setIsPasswordVisible((prev) => !prev); // Toggle visibility
+    setIsPasswordVisible((prev) => !prev);
   };
-  const togglePasswordVisibilit = () => {
-    setIsPasswordVisibled((prev) => !prev); // Toggle visibility
+
+  const onSignupPress = async () => {
+    const result = await handleSignup(email, password);
+    if (result.success) {
+      Toast.show({
+        type: 'success',
+        text1: 'Signup Successful',
+        text2: 'Please verify your email.',
+      });
+      router.push('/(auth)/verification');
+    } else {
+      Toast.show({
+        type: 'error',
+        text1: 'Signup Failed',
+        text2: result.error,
+      });
+    }
   };
+
+  const onGoogleSignupPress = async () => {
+    const result = await handleGoogleSignup();
+    if (result.success) {
+      Toast.show({
+        type: 'success',
+        text1: 'Google Signup Successful',
+        text2: 'Welcome to HealthTune!',
+      });
+      router.push('/(tabs)');
+    } else {
+      Toast.show({
+        type: 'error',
+        text1: 'Google Signup Failed',
+        text2: result.error,
+      });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#2D796C', '#235F55']} style={styles.gradient}>
@@ -41,7 +71,6 @@ const SignupScreen: React.FC = () => {
               value={email}
               onChangeText={setEmail}
             />
-
 
             <View style={styles.passwordContainer}>
               <InputField
@@ -59,22 +88,25 @@ const SignupScreen: React.FC = () => {
                 />
               </TouchableOpacity>
             </View>
-           
+
             <TouchableOpacity
-              style={styles.signUpButton}
-              onPress={() => handleSignup(email, password)}
+              style={[styles.signUpButton, loading && { opacity: 0.7 }]}
+              onPress={onSignupPress}
+              disabled={loading}
             >
-              <Text style={styles.signUpButtonText}>Sign Up</Text>
+              <Text style={styles.signUpButtonText}>
+                {loading ? 'Signing Up...' : 'Sign Up'}
+              </Text>
             </TouchableOpacity>
-            {/* Google Signup Button */}
-            {/* <TouchableOpacity onPress={handleGoogleSignup} style={styles.googleIconButton}>
-              <FontAwesome
-                name="google"
-                size={24}
-                color="Black"
-              />
+
+            <TouchableOpacity
+              onPress={onGoogleSignupPress}
+              style={styles.googleIconButton}
+              disabled={loading}
+            >
+              <FontAwesome name="google" size={24} color="Black" />
               <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
 
             <TouchableOpacity onPress={handleSignInPress}>
               <Text style={styles.link}>Already have an account? Sign In</Text>
@@ -87,34 +119,19 @@ const SignupScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center'
-  },
+  container: { flex: 1 },
+  gradient: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  scrollContainer: { flexGrow: 1, justifyContent: 'center' },
   signUpButton: {
-    backgroundColor: '#2D796C',  // Green color (adjust as needed)
+    backgroundColor: '#2D796C',
     paddingVertical: 14,
     borderRadius: 8,
     marginVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  passwordContainer: {
-    position: 'relative',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 10,
-    top: 22,
-  },
+  passwordContainer: { position: 'relative' },
+  eyeIcon: { position: 'absolute', right: 10, top: 22 },
   signUpButtonText: {
     color: '#fff',
     fontWeight: 'bold',
@@ -127,20 +144,20 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 12,
-    elevation: 5
+    elevation: 5,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     color: '#1a365d',
     textAlign: 'center',
-    marginBottom: 20
+    marginBottom: 20,
   },
   link: {
     color: 'Black',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 16
+    marginTop: 16,
   },
   googleIconButton: {
     backgroundColor: 'white',
@@ -158,7 +175,7 @@ const styles = StyleSheet.create({
     color: 'Black',
     fontWeight: 'bold',
     fontSize: 16,
-    marginLeft: 10, // Space between the icon and text
+    marginLeft: 10,
   },
 });
 

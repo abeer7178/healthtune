@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Button } from '~/src/components/ui/button';
-import { useAuth } from '~/src/hooks/useAuth';
+
+import { useAuth } from '../../src/hooks/useAuth';
+import { useSessionStore } from '../../src/store/store';
+import { router } from 'expo-router';
 
 interface SettingItemProps {
     icon: keyof typeof MaterialIcons.glyphMap;
@@ -26,7 +28,7 @@ const SettingsScreen = () => {
     const [autoSave, setAutoSave] = useState(true);
     const [dataSharing, setDataSharing] = useState(false);
     const { handleLogout } = useAuth(); // Get logout function
-
+ const { plans, fetchAllPlans, user, loading, error } = useSessionStore();
     const renderSettingItem = ({
         icon,
         title,
@@ -138,14 +140,15 @@ const SettingsScreen = () => {
                             isLast: false,
                         })}
                         {renderSettingItem({
-                            icon: 'medical-services',
-                            title: 'Medical Terminology',
-                            subtitle: 'Configure specialty-specific terms',
-                            value: 'General Practice',
-                            onPress: () => { },
-                            type: 'arrow',
-                            isLast: true,
-                        })}
+    icon: 'credit-card',
+    title: 'Plan Subscription',
+    subtitle: 'View and manage your subscription plan',
+    value: user?.userPlan?.plan?.name || 'Free Plan', // Assuming userPlan has a planName field
+    //onPress: () => { },
+    onPress: () => router.push({ pathname: '/UpgradePlan' }),
+    type: 'arrow',
+    isLast: true,
+})}
                     </View>
                 </View>
 
@@ -191,7 +194,7 @@ const SettingsScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7F9',
+        backgroundColor: 'white',
     },
     logoutButton: {
         backgroundColor: 'white', // Ensures white background for the button
@@ -217,6 +220,7 @@ const styles = StyleSheet.create({
     header: {
         padding: 20,
         paddingTop: 60,
+        paddingBottom:20,
         borderBottomLeftRadius: 24,
         borderBottomRightRadius: 24,
     },

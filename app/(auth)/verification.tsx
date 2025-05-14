@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSignUp } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
-import { toast } from 'sonner-native';
+import Toast from 'react-native-toast-message'; // Use react-native-toast-message
 import { Image } from 'expo-image';
 
 const OtpVerificationScreen = () => {
@@ -41,7 +41,7 @@ const OtpVerificationScreen = () => {
     }, 1000);
   };
 
-  const handleOtpChange = (text: any, index: any) => {
+  const handleOtpChange = (text: string, index: number) => {
     if (!/^[0-9]*$/.test(text)) return;
     const updatedOtp = [...otp];
     updatedOtp[index] = text;
@@ -53,19 +53,31 @@ const OtpVerificationScreen = () => {
 
   const handleOtpSubmit = async () => {
     const otpCode = otp.join('');
-    if (otpCode.length === 6 && isLoaded ) {
+    if (otpCode.length === 6 && isLoaded) {
       setIsLoading(true);
       try {
         await signUp.attemptEmailAddressVerification({ code: otpCode });
-        //toast.success('Email Verified Successfully!');
-        router.push('/(tabs)');
+        Toast.show({
+          type: 'success',
+          text1: 'Email Verified',
+          text2: 'Your email has been verified successfully!',
+        });
+        router.push('/(auth)/login');
       } catch (error: any) {
-        toast.error(error?.errors?.[0]?.message || error?.message || 'Invalid OTP');
+        Toast.show({
+          type: 'error',
+          text1: 'Verification Failed',
+          text2: error?.errors?.[0]?.message || error?.message || 'Invalid OTP',
+        });
       } finally {
         setIsLoading(false);
       }
     } else {
-      toast.error('Please enter a valid 6-digit OTP');
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid OTP',
+        text2: 'Please enter a valid 6-digit OTP',
+      });
     }
   };
 
@@ -73,10 +85,18 @@ const OtpVerificationScreen = () => {
     if (signUp?.prepareEmailAddressVerification) {
       try {
         await signUp.prepareEmailAddressVerification();
-        toast.success('OTP Resent to your email');
+        Toast.show({
+          type: 'success',
+          text1: 'OTP Resent',
+          text2: 'A new OTP has been sent to your email',
+        });
         startTimer();
-      } catch (error) {
-        toast.error((error as any)?.errors?.[0]?.message || (error as any)?.message || 'Failed to resend OTP');
+      } catch (error: any) {
+        Toast.show({
+          type: 'error',
+          text1: 'Resend Failed',
+          text2: error?.errors?.[0]?.message || error?.message || 'Failed to resend OTP',
+        });
       }
     }
   };
@@ -85,20 +105,18 @@ const OtpVerificationScreen = () => {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#2D796C', '#235F55']} style={styles.gradient}>
         <View style={styles.headerContainer}>
-          <Image source={require('~/assets/images/otp.png')} style={styles.logo} resizeMode="contain" />
+          <Image source={require('../../assets/images/otp.png')} style={styles.logo} resizeMode="contain" />
         </View>
 
         <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
           <Text style={styles.title}>Verify OTP</Text>
           <Text style={styles.subtitle}>We have sent an OTP to your email</Text>
-          
-         
 
           <View style={styles.otpInputContainer}>
             {otp.map((digit, index) => (
               <TextInput
                 key={index}
-                ref={(ref) => (inputRefs.current[index] = ref)}
+                ref={(ref) => { inputRefs.current[index] = ref; }}
                 style={styles.otpInputField}
                 value={digit}
                 onChangeText={(text) => handleOtpChange(text, index)}
@@ -109,19 +127,25 @@ const OtpVerificationScreen = () => {
             ))}
           </View>
 
-          <TouchableOpacity style={styles.signInButton} onPress={handleOtpSubmit} disabled={isLoading}>
+          <TouchableOpacity
+            style={[styles.signInButton, isLoading && { opacity: 0.7 }]}
+            onPress={handleOtpSubmit}
+            disabled={isLoading}
+          >
             <Text style={styles.signInButtonText}>{isLoading ? 'Verifying...' : 'Verify OTP'}</Text>
           </TouchableOpacity>
+
           <View style={styles.timerContainer}>
+            <Image source={require('../../assets/images/clock.gif')} style={styles.clock} />
             <Text style={styles.timerText}>Resend in {timer}s</Text>
-            <Image 
-  source={require('~/assets/images/clock.gif')} 
-  style={styles.clock} 
-/>
+            <TouchableOpacity
+              onPress={handleResendOtp}
+              disabled={isResendDisabled}
+              style={[styles.resendButton, isResendDisabled && { opacity: 0.5 }]}
+            >
+              <Text style={styles.resendButtonText}>Resend OTP</Text>
+            </TouchableOpacity>
           </View>
-         {/* Countdown Timer with GIF Clock */}
-
-
         </Animated.View>
       </LinearGradient>
     </SafeAreaView>
@@ -134,17 +158,11 @@ const styles = StyleSheet.create({
   headerContainer: { alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 30, fontWeight: '700', color: 'Black', marginBottom: 4, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#888', marginBottom: 20, textAlign: 'center' },
-  clock: { 
-    width: 30, 
-    height: 30, 
-    marginRight: 8 
-  },
-  
+  clock: { width: 30, height: 30, marginRight: 8 },
   card: {
     backgroundColor: '#fff',
     width: '100%',
     padding: 30,
-    paddingHorizontal: 30,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -178,10 +196,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   signInButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  link: { color: 'Black', fontSize: 14, textAlign: 'center', marginTop: 16 },
-  disabledText: { color: '#888' },
-  timerContainer: { alignItems: 'center', marginBottom: 10 , flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  timerContainer: { alignItems: 'center', marginBottom: 10, gap: 8 },
   timerText: { fontSize: 16, color: '#888' },
+  resendButton: {
+    marginTop: 10,
+    paddingVertical: 10,
+  },
+  resendButtonText: {
+    color: '#2D796C',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default OtpVerificationScreen;
